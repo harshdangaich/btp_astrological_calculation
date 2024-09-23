@@ -1,1 +1,1 @@
-# btp_astrological_calculation
+# btp_astrological_calculations
