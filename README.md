@@ -1,73 +1,38 @@
 # btp_astrological_calculations
 # Astrological Marriage Prediction Model
 
-This repository contains a neural network model implemented in PyTorch for predicting the success of a marriage based on astrological calculations. The model uses features such as house positions and planetary aspects to generate a binary prediction.
+## Project Overview
+This project uses a machine learning model to predict the success of a marriage based on astrological calculations. The model takes into account the positions of astrological houses and planetary aspects between two individuals to make a prediction.
 
-## Table of Contents
-- [Overview](#overview)
-- [Features](#features)
-- [Model Architecture](#model-architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Input and Output](#input-and-output)
-- [Training the Model](#training-the-model)
-- [Contributing](#contributing)
-- [License](#license)
+## Inputs
+- **Astrological House Positions**: 
+  - 12 house positions for each partner (24 total features).
+  - These values are normalized between 0 and 1 based on astrological principles.
+  
+- **Planetary Aspects**: 
+  - 10 aspects indicating the angular relationships between planets for both partners.
+  - These values are between -1 and 1, where the sign and magnitude represent compatibility.
 
-## Overview
-This project is a machine learning model designed to predict the success of a marriage using astrological compatibility. It considers:
-- The positions of 12 astrological houses for each partner.
-- Planetary aspects (angular relationships between planets) to determine compatibility.
-
-The model outputs a binary classification:
-- `0`: Unsuccessful marriage.
-- `1`: Successful marriage.
-
-## Features
-- **House Positions**: Represents the positions of the 12 astrological houses for both partners.
-- **Planetary Aspects**: Represents the angular relationships between the planets.
-- **Binary Classification**: The model predicts whether a marriage will be successful (`1`) or unsuccessful (`0`).
+## Outputs
+- **Prediction**: 
+  - A binary output indicating the likelihood of a successful marriage:
+    - `0`: Unsuccessful
+    - `1`: Successful
 
 ## Model Architecture
-The model is a neural network implemented using PyTorch, with the following architecture:
-- **Input Layer**: 34 features (24 for house positions + 10 for planetary aspects).
-- **Hidden Layers**:
-  - First hidden layer: 64 neurons, ReLU activation.
-  - Second hidden layer: 32 neurons, ReLU activation.
-- **Output Layer**: 1 neuron, Sigmoid activation (for binary classification).
+- Neural network built using PyTorch.
+- 34 input features (24 house positions + 10 planetary aspects).
+- Hidden layers with ReLU activations.
+- Sigmoid activation for the final binary prediction.
 
-The model uses binary cross-entropy loss for classification and a sigmoid function for final output.
+## Objective
+The goal of the model is to provide a predictive tool that uses astrological principles to forecast the success or failure of a marriage based on house positions and planetary aspects.
 
-## Installation
-1. Clone the repository:
-    ```bash
-    git clone https://github.com/your-username/astrological-marriage-prediction.git
-    cd astrological-marriage-prediction
-    ```
-
-2. Install the required dependencies:
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-3. Ensure you have PyTorch installed. You can install it via:
-    ```bash
-    pip install torch torchvision
-    ```
+## Requirements
+- Python 3.x
+- PyTorch
 
 ## Usage
-1. Prepare your input data (normalized astrological house positions and planetary aspects).
-2. Run the model with your dataset by executing:
-    ```bash
-    python train.py
-    ```
+- Input astrological data for both individuals (house positions and planetary aspects).
+- The model processes the data and returns a binary prediction for marriage success.
 
-### Example Input Format:
-Input features include normalized house positions and planetary aspects:
-```python
-input_data = [
-    # House positions for both partners (24 features)
-    0.25, 0.48, 0.73, ..., 0.92,
-    # Planetary aspects (10 features)
-    1.0, -0.7, 0.6, ..., -0.8
-]
