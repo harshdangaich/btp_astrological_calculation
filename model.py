@@ -1,67 +1,150 @@
-# Function to calculate refined planetary aspects based on astrological principles
-def calculate_aspects_refined(person1_planets, person2_planets):
-    """Calculate aspects between two sets of planetary positions based on astrological compatibility."""
-    aspects = []
-    for p1, p2 in zip(person1_planets, person2_planets):
-        angle = abs(p1 - p2)
-        if angle > 180:  # Normalize angle to be within 0-180 degrees
-            angle = 360 - angle
+# Install necessary libraries
+!pip install pyswisseph
+!pip install flatlib
 
-        # Aspect calculation with refined astrological values
-        if angle <= 8:  # Conjunction (0° +/- 8°)
-            aspects.append(1.0)
-        elif 52 <= angle <= 68:  # Sextile (60° +/- 8°)
-            aspects.append(0.6)
-        elif 82 <= angle <= 98:  # Square (90° +/- 8°)
-            aspects.append(-0.7)
-        elif 112 <= angle <= 128:  # Trine (120° +/- 8°)
-            aspects.append(0.9)
-        elif 172 <= angle <= 188:  # Opposition (180° +/- 8°)
-            aspects.append(-0.8)
-        else:
-            aspects.append(0)  # No major aspect
+# Import required libraries
+import swisseph as swe
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, Dataset
+from datetime import datetime
+import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix
 
-    return aspects
+# Function to calculate planetary positions
+def calculate_planet_positions(date, time, latitude, longitude):
+    try:
+        dt = datetime.strptime(f"{date} {time}", "%Y-%m-%d %H:%M")
+        jd = swe.julday(dt.year, dt.month, dt.day, dt.hour + dt.minute / 60.0)
+        swe.set_topo(longitude, latitude, 0)
 
-# Modified function to generate dataset with fine-tuned planetary aspects
-def generate_extended_dataset_refined(num_samples):
-    house_positions = np.random.rand(num_samples, 24)  # 12 houses for each person
-    planetary_positions_1 = np.random.rand(num_samples, 10) * 360  # Positions of 10 planets (0-360 degrees)
-    planetary_positions_2 = np.random.rand(num_samples, 10) * 360  # Positions of 10 planets for partner
-    
-    aspect_features = []
-    for i in range(num_samples):
-        aspects = calculate_aspects_refined(planetary_positions_1[i], planetary_positions_2[i])
-        aspect_features.append(aspects)
-    
-    aspect_features = np.array(aspect_features)
-    
-    # Combine house positions and aspect features
-    features = np.hstack((house_positions, aspect_features))
-    
-    # Binary labels (0 or 1) indicating successful marriage or not
-    labels = np.random.randint(0, 2, size=num_samples)
-    
-    return features, labels
+        planet_positions = {}
+        planets = [
+            swe.SUN, swe.MOON, swe.MERCURY, swe.VENUS, swe.MARS,
+            swe.JUPITER, swe.SATURN, swe.URANUS, swe.NEPTUNE, swe.PLUTO
+        ]
+        for planet in planets:
+            position, _ = swe.calc_ut(jd, planet)
+            planet_positions[swe.get_planet_name(planet)] = position[0]
 
-# Generate the new dataset with refined aspects
-train_features, train_labels = generate_extended_dataset_refined(1000)
-test_features, test_labels = generate_extended_dataset_refined(200)
+        return planet_positions
+    except Exception as e:
+        print(f"Error calculating planetary positions: {e}")
+        return {}
 
-# The rest of the code remains the same, using the new dataset with fine-tuned aspect values
-train_dataset = MarriageAstrologyDataset(train_features, train_labels)
-train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
+# Custom Dataset for Marriage Astrology
+class MarriageAstrologyDataset(Dataset):
+    def __init__(self, data):
+        self.data = data
 
-test_dataset = MarriageAstrologyDataset(test_features, test_labels)
-test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    def __len__(self):
+        return len(self.data)
 
-# Updating model to handle 34 inputs (24 house positions + 10 planetary aspects)
-input_size = 34  # 24 house features + 10 planetary aspect features
-model = AstrologyMarriageModel(input_size)
+    def __getitem__(self, idx):
+        data_point = self.data[idx]
+        person1_data, person2_data, outcome = data_point['person1'], data_point['person2'], data_point['outcome']
 
-# Train and evaluate the model as before
-criterion = nn.BCELoss()
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+        # Calculate planetary positions
+        planet_positions1 = calculate_planet_positions(*person1_data)
+        planet_positions2 = calculate_planet_positions(*person2_data)
 
-train_model(model, criterion, optimizer, train_loader)
-evaluate_model(model, test_loader)
+        # Extract features as lists
+        planets = [
+            swe.SUN, swe.MOON, swe.MERCURY, swe.VENUS, swe.MARS,
+            swe.JUPITER, swe.SATURN, swe.URANUS, swe.NEPTUNE, swe.PLUTO
+        ]
+        features1 = [planet_positions1.get(swe.get_planet_name(planet), 0.0) for planet in planets]
+        features2 = [planet_positions2.get(swe.get_planet_name(planet), 0.0) for planet in planets]
+
+        # Combine features and outcome
+        features = features1 + features2
+        features = torch.tensor(features, dtype=torch.float32)
+        outcome = torch.tensor(outcome, dtype=torch.float32)
+
+        return features, outcome
+
+# Define the model
+class AstrologyMarriageModel(nn.Module):
+    def __init__(self, input_size):
+        super(AstrologyMarriageModel, self).__init__()
+        self.fc1 = nn.Linear(input_size, 64)
+        self.fc2 = nn.Linear(64, 32)
+        self.fc3 = nn.Linear(32, 1)
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        x = torch.relu(self.fc1(x))
+        x = torch.relu(self.fc2(x))
+        x = self.sigmoid(self.fc3(x))
+        return x
+
+# Training function
+def train_model(model, criterion, optimizer, dataloader, num_epochs=20):
+    model.train()
+    for epoch in range(num_epochs):
+        running_loss = 0.0
+        for features, labels in dataloader:
+            features, labels = features.float(), labels.float().unsqueeze(1)
+
+            # Forward pass
+            outputs = model(features)
+            loss = criterion(outputs, labels)
+
+            # Backward pass and optimization
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+        print(f"Epoch {epoch + 1}/{num_epochs}, Loss: {running_loss / len(dataloader):.4f}")
+
+# Evaluation function
+def evaluate_model(model, dataloader):
+    model.eval()
+    true_labels = []
+    predictions = []
+
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            outputs = model(inputs)
+            predicted_labels = torch.round(outputs)
+            true_labels.extend(labels.numpy())
+            predictions.extend(predicted_labels.numpy())
+
+    acc = accuracy_score(true_labels, predictions)
+    conf_matrix = confusion_matrix(true_labels, predictions)
+    print(f"Accuracy: {acc * 100:.2f}%")
+    print(f"Confusion Matrix:\n{conf_matrix}")
+
+# Main script
+if __name__ == "__main__":
+    # Replace `dataset_of_100` with your actual data
+    dataset_of_100 = [
+        # Example data structure: {'person1': (date, time, lat, long), 'person2': (date, time, lat, long), 'outcome': 1/0}
+        # Add your dataset here
+    ]
+
+    # Split data into train and test sets
+    train_data = dataset_of_100[:70]
+    test_data = dataset_of_100[70:]
+
+    train_dataset = MarriageAstrologyDataset(train_data)
+    test_dataset = MarriageAstrologyDataset(test_data)
+
+    train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=16, shuffle=False)
+
+    # Initialize the model, loss function, and optimizer
+    input_size = len(train_dataset[0][0])
+    model = AstrologyMarriageModel(input_size)
+    criterion = nn.BCELoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # Train the model
+    print("Training the model...")
+    train_model(model, criterion, optimizer, train_dataloader)
+
+    # Evaluate the model
+    print("\nEvaluating the model...")
+    evaluate_model(model, test_dataloader)
